@@ -1,6 +1,6 @@
 import mongoose, { SchemaType, Schema } from "mongoose";
 import bcrypt from "bcryptjs"
-
+import jwt from "jsonwebtoken"; // For generating JWTs
 
 // Define the enum for roles
 const RoleEnum = Object.freeze({
@@ -32,6 +32,7 @@ const UserSchema = new mongoose.Schema({
   password: {
     type: String,
     required: true,
+    // select:false
   },
 
   // Optional fields (based on  LMS features):
@@ -59,10 +60,25 @@ const UserSchema = new mongoose.Schema({
     type: Boolean,
     default: false,
   },
+
 }, {
     timestamps: true // to know when user was created when was updated
   });
 ;
+
+UserSchema.methods.SignAcessToken=function(){
+  const token = jwt.sign({id: this._id}, process.env.ACCESS_TOKEN || '',{
+    expiresIn: process.env.EXPIRESIN||'5m',//Tem
+  });
+  return token;
+}
+
+UserSchema.methods.SignRefreshToken=function(){
+  const token = jwt.sign({id: this._id}, process.env.REFRESH_TOKEN || '',{
+    expiresIn: process.env.EXPIRESIN_REFRESH||'3d'
+  });
+  return token;
+}
 
   const User=mongoose.model('User',UserSchema);
 //This is collection, collection contain docs,docs contains fields like name,date. collectn name start capital

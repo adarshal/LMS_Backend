@@ -2,9 +2,9 @@ import { Redis } from "ioredis";
 
 const redisClient=()=>{
     if(process.env.REDIS_URL){
-        console.log("redis coonected");
+        console.log("redis connected");
         
-        return new Redis(process.env.REDIS_URL);
+        return (process.env.REDIS_URL);
         }else{
 
               throw new Error("Redis connection failed");
@@ -19,5 +19,5 @@ const redisClient=()=>{
 }
 
 
-export default redisClient;
+export const redis=new Redis(redisClient());
     

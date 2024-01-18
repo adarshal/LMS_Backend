@@ -1,12 +1,14 @@
 import { NextFunction, Request, Response } from "express";
 import bcrypt from "bcryptjs"; // For password hashing
-import jwt from "jsonwebtoken"; // For generating JWTs
+import jwt, { JwtPayload } from "jsonwebtoken"; // For generating JWTs
 import { catchAsyncError } from "../middleware/catchAsyncError";
 import path from "path";
 import ejs from "ejs";
 import sendMail from "../utils/sendMail";
 import { ErrorHandler } from "../utils/ErrorHandler";
-import { json } from "stream/consumers";
+import { accessTokenOptions, refreshTokenOptions, sendToken } from "../utils/jwt";
+import { redis } from "../utils/redis";
+import { getUserById } from "../services/user.services";
 const User = require("../models/user");
 
 //register user
@@ -108,95 +110,230 @@ export const activateUser = catchAsyncError(
         success:"true",
         message:"Account created successfully!"
       })
-    } catch (error) {}
+    } catch (error:any) {
+      return new ErrorHandler(error.message, 400);
+    }
   }
-);//2.45
+);//2.46
 
-const signin = async (req: Request, res: Response) => {
+export const signin = catchAsyncError(
+  async (req: Request, res: Response, next: NextFunction) => {
   try {
     const { email, password } = req.body;
+    if(!email || !password){
+      return next(new ErrorHandler('Please provide an email and a password',400));
+    }
 
     const user = await User.findOne({ email });
 
     if (!user) {
-      return res.status(401).json({ message: "Invalid email or password" });
+      return next(new ErrorHandler("Invalid email or password",400));
     }
 
     const isMatch = await bcrypt.compare(password, user.password);
 
     if (!isMatch) {
-      return res.status(401).json({ message: "Invalid email or password" });
+      return next(new ErrorHandler("Invalid email or password",400));
     }
 
+    sendToken(user,200,res);
     // Generate JWT
-    const token = jwt.sign(
-      { userId: user._id },
-      process.env.JWT_SECRET as string,
-      {
-        expiresIn: "1h",
+    // const token = jwt.sign(
+    //   { userId: user._id },
+    //   process.env.JWT_SECRET as string,
+    //   {
+    //     expiresIn: "1h",
+    //   }
+    // );
+
+    // res.json({
+    //   message: "Signin successful",
+    //   token,
+    //   user: {
+    //     _id: user._id,
+    //     name: user.name,
+    //     email: user.email,
+    //     role: user.role,
+    //   },
+    // });
+  } catch (err:any) {
+    console.error(err);
+    res.status(500).json({ message: "Something went wrong" });
+    return new ErrorHandler(err.message, 400);
+  }
+});
+
+export const logout= catchAsyncError(
+  async (req: Request, res: Response, next: NextFunction) => {
+   try {
+    res.cookie("access_token","", {maxAge:1});
+    res.cookie("refresh_token","", {maxAge:1});
+    const userId=req.user?._id || '';
+    redis.del(userId);
+    res.status(200).json({ success:true,message:"Logged out successfully!" })
+   } catch (error:any) {
+    return new ErrorHandler(error.message, 400);
+   }
+  }
+)
+
+interface ISocialAuthBody{
+  email:string;
+  name:string;
+  avatar:string
+}
+//update access token
+export const updateAccessToken=(catchAsyncError(
+  async (req: Request, res: Response, next: NextFunction) => {
+try {
+  const refresh_token= req.cookies.refresh_token as string;
+  if(!refresh_token){
+    return next( new ErrorHandler('Not authenticated!',400));
+  }
+  const decoded= jwt.verify(refresh_token, process.env?.REFRESH_TOKEN as string) as JwtPayload;
+  const message='Could not refresh token';
+  
+  if(!decoded){
+    return next( new ErrorHandler(message,400))
+  };
+  const session = await redis.get(decoded.id as string )
+    
+    if (!session) {
+      return next( new ErrorHandler(message,400));
+    }
+    const user= JSON.parse(session);
+    const accessToken=jwt.sign({id:user._id},process.env.ACCESS_TOKEN as string,{
+      expiresIn:'5m',
+    })
+    const refreshToken=jwt.sign({id:user._id},process.env.REFRESH_TOKEN as string,{
+      expiresIn:'3d',
+    })
+    req.user= user;
+    res.cookie("access_token",accessToken, accessTokenOptions);
+    res.cookie("refresh_token",refreshToken, refreshTokenOptions);
+   return res.status(200).json({
+      success:true,
+      accessToken
+    })
+
+
+
+} catch (error:any) {
+  return new ErrorHandler(error.message, 400);
+}
+}));
+
+  //social auth
+  export const socialAuth=(catchAsyncError(
+    async (req: Request, res: Response, next: NextFunction) => {
+      try {
+        const {email,name,avatar}= req.body as ISocialAuthBody;
+        const user=await User.findOne({email});
+        if(!user){
+          const password= Math.random().toString(36).slice(-16);
+          const hashedPassword = await bcrypt.hash(password, 10);
+          const newUser=await User.create({email,name,avatar,password:hashedPassword});
+          sendToken(newUser,200,res);
+        }
+      } catch (error) {
+        
       }
-    );
+    }))
 
-    res.json({
-      message: "Signin successful",
-      token,
-      user: {
-        _id: user._id,
-        name: user.name,
-        email: user.email,
-        role: user.role,
-      },
-    });
-  } catch (err) {
-    console.error(err);
-    res.status(500).json({ message: "Something went wrong" });
-  }
-};
 
-const update = async (req: Request, res: Response) => {
+const getUser = catchAsyncError(async (req: Request, res: Response, next: NextFunction) => {
   try {
-    const { userId } = req.params;
-    const updates = req.body;
+    const { userId } = req.user?.id;
+    getUserById(userId,res);
 
-    // Find user
-    const user = await User.findByIdAndUpdate(userId, updates, {
-      new: true, // Return updated document
-    });
+  } catch (err:any) {
+    
+    return next(new ErrorHandler(err.message,400));
+  }
+});
+
+interface  IUpdateUserInfo{
+  name?:string,
+  email?: string,
+}
+export const updateUserInfo =catchAsyncError( 
+  async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const { email,name } = req.body as IUpdateUserInfo;
+    // const updates = req.body;
+    const userId=req.user?.id;
+    const user=await User.findByIdAndUpdate(userId,{name,email},{new :true});
+
+    // // Find user
+    // const user = await User.findByIdAndUpdate(userId, updates, {
+    //   new: true, // Return updated document
+    // });
 
     if (!user) {
-      return res.status(404).json({ message: "User not found" });
+      return next(new ErrorHandler("User not found",400));  
     }
-
-    // Handle password updates securely (optional)
-    if (updates.password) {
-      const hashedPassword = await bcrypt.hash(updates.password, 10);
-      user.password = hashedPassword;
+    if(email && user){
+      const isEmailExist= await User.findOne({email});
+      if(isEmailExist){
+        return next(new ErrorHandler('This Email is already in use',400));
+        }
+        user.email=email;
+      }
+      if(name && user){
+        user.name=name;
+      }
       await user.save();
+      await redis.set(userId,JSON.stringify(user));
+      res.status(201).json({
+        success:true,
+        user
+        }) ;
     }
 
-    res.json({ message: "User updated successfully", user });
-  } catch (err) {
-    console.error(err);
-    res.status(500).json({ message: "Something went wrong" });
-  }
-};
+    // // Handle password updates securely (optional)
+    // if (updates.password) {
+    //   const hashedPassword = await bcrypt.hash(updates.password, 10);
+    //   user.password = hashedPassword;
+    //   await user.save();
+    // }
 
-const getUser = async (req: Request, res: Response) => {
+    
+   catch (err:any) {
+    // console.error(err);
+    return next(new ErrorHandler(err.message,400));
+  }
+} );
+
+// update password
+interface IUpdatePassword{
+  oldPassword: string;
+  newPassword: string;
+}
+export const updatePassword=catchAsyncError(async(req:Request,res:Response,next:NextFunction) => {
+
   try {
-    const { userId } = req.params;
+    const {oldPassword, newPassword} =req.body as IUpdatePassword;
+    const user= await User.findById(req.user?._id);
 
-    const user = await User.findById(userId);
+    // check the current password first
+    const isMatch = await bcrypt.compare(oldPassword, user?.password);
 
-    if (!user) {
-      return res.status(404).json({ message: "User not found" });
+    if (!isMatch) {
+      return next(new ErrorHandler("Invalid old password",400));
     }
-
-    res.json(user);
-  } catch (err) {
-    console.error(err);
-    res.status(500).json({ message: "Something went wrong" });
-  }
-};
+      
+        user.password=await  bcrypt.hash(oldPassword, 10);;
+        await user.save();
+        await redis.set(user?._id, JSON.stringify(user));
+        user.password="";
+        res.status(200).json({
+          success:true,
+          user,
+        })
+  } catch (err:any) {
+    return next(new ErrorHandler(err.message,400));
+  } 
+})
 
 const deleteUser = async (req: Request, res: Response) => {
   try {
