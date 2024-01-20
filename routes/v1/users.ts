@@ -1,6 +1,6 @@
 import express, { NextFunction, Request, Response } from "express";
 // Importing the necessary controllers and middleware
-import { activateUser, signup, signin, logout, updateAccessToken, socialAuth, updateUserInfo, updatePassword } from "../../controllers/userController";
+import { activateUser, signup, signin, logout, updateAccessToken, socialAuth, updateUserInfo, updatePassword, updateProfilePic } from "../../controllers/userController";
 import { isAuthenticated } from "../../middleware/auth";
 
 // Creating a new router instance
@@ -33,6 +33,7 @@ router.get("/logout", isAuthenticated, logout);
 router.get("/refreshtoken", isAuthenticated,updateAccessToken);
 router.put("/update-userinfo", isAuthenticated,updateUserInfo);
 router.put("/update-userpassword", isAuthenticated,updatePassword);
+router.put("/update-avatar", isAuthenticated,updateProfilePic);
 
 // Exporting the router module
 module.exports = router;

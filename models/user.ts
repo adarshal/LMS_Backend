@@ -60,6 +60,11 @@ const UserSchema = new mongoose.Schema({
     type: Boolean,
     default: false,
   },
+  avatar:{
+    public_id:String,
+    url:String
+
+  }
 
 }, {
     timestamps: true // to know when user was created when was updated
