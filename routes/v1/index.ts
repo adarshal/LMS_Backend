@@ -13,5 +13,6 @@ router.get("/test",(req:Request,res:Response,next:NextFunction)=>{
 });
 
 router.use("/user",require("./users"))
+router.use("/course",require("./course"))
 
 module.exports= router;
