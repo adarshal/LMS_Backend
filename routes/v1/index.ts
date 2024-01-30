@@ -14,5 +14,7 @@ router.get("/test",(req:Request,res:Response,next:NextFunction)=>{
 
 router.use("/user",require("./users"))
 router.use("/course",require("./course"))
+router.use("/order",require("./course"))
+router.use("/notification",require("./notification"))
 
 module.exports= router;

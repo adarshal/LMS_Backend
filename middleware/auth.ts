@@ -8,7 +8,7 @@ import { redis } from "../utils/redis";
 // to check authenticated user.
 export const isAuthenticated = catchAsyncError(
   async (req: Request, res: Response, next: NextFunction) => {
-    console.log(req.cookies)
+    // console.log(req.cookies)
     const access_token = req.cookies.access_token;
     if (!access_token){
       return next(new ErrorHandler("You are not logged in",400));
@@ -32,7 +32,9 @@ export const authorizeRoles=(...roles:string[])=>{
         //@ts-ignore
         if(!roles.includes(req.user?.role || '')){
             return next(new ErrorHandler(`Role ${req.user?.role} is not allowed to access this`,403));
-                next()
+                
                 }
+                next()
             }
+           
         }

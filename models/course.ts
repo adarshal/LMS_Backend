@@ -1,6 +1,6 @@
 import mongoose, { SchemaType, Schema, Model } from "mongoose";
 
-interface IComment extends Document {
+export interface IComment extends Document {
   user: object;
   comment: string;
   commentReplies?: IComment[]
@@ -41,7 +41,7 @@ interface ICourse extends Document{
     benifits: {title:string[]};
     prerequisite:{title:string[]};
     reviews:IReview[];
-    CourseData:ICourseData[];
+    courseData:ICourseData[];
     ratings?:number;
     purchased?:number;
 }
@@ -53,6 +53,7 @@ const revieSchema= new Schema<IReview>({
         default:0,
     },
     comment:String,
+    commentReplies: [Object],
 })
 const linkSchema =new Schema<ILink>({
     title:String,
@@ -100,7 +101,7 @@ const CourseSchema = new Schema<ICourse>({
         },
         url:{
             type:String,
-            required:true
+            // required:true
         },
     },
     tags:{
@@ -121,7 +122,7 @@ const CourseSchema = new Schema<ICourse>({
     benifits:[{title:String}],
     prerequisite:[{title:String}],
     reviews:[revieSchema],
-    CourseData:[courseDataSchema],
+    courseData:[courseDataSchema],
     ratings:{
         type:Number,
         default:0

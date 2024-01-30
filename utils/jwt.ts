@@ -43,7 +43,7 @@ export const sendToken= (user:any, statusCode:number, res:Response)=>{
     res.cookie("access_token",accessToken, accessTokenOptions);
     res.cookie("refresh_token",refreshToken, refreshTokenOptions);
     user.password="";
-    // console.log(userToSend)
+    // console.log(user)
     return res.status(statusCode).json({
         success:true,
         accessToken,
