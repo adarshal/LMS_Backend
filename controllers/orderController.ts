@@ -6,7 +6,7 @@ import path from "path";
 import ejs from "ejs";
 import sendMail from "../utils/sendMail";
 import Course from "../models/course";
-import { newOrder } from "../services/order.service";
+import { getAllOrderssService, newOrder } from "../services/order.service";
 import Notification from "../models/notification";
 const User = require("../models/user");
 
@@ -82,6 +82,18 @@ export const createOrder = catchAsyncError(
 
     } catch (err: any) {
         return next(new ErrorHandler(err.message, 500));
+      }
+    }
+  );
+
+
+  // get all orders-- only admins
+  export const getAllOrders = catchAsyncError(
+    async (req: Request, res: Response, next: NextFunction) => {
+      try {
+        getAllOrderssService(res);
+      } catch (err: any) {
+        return next(new ErrorHandler(err.message, 400));
       }
     }
   );

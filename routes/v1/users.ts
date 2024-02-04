@@ -1,7 +1,7 @@
 import express, { NextFunction, Request, Response } from "express";
 // Importing the necessary controllers and middleware
-import { activateUser, signup, signin, logout, updateAccessToken, socialAuth, updateUserInfo, updatePassword, updateProfilePic } from "../../controllers/userController";
-import { isAuthenticated } from "../../middleware/auth";
+import { activateUser, signup, signin, logout, updateAccessToken, socialAuth, updateUserInfo, updatePassword, updateProfilePic, adminGetAllUsers, updateUserRole, deleteUser } from "../../controllers/userController";
+import { authorizeRoles, isAuthenticated } from "../../middleware/auth";
 
 // Creating a new router instance
 const router = express.Router();
@@ -34,6 +34,10 @@ router.get("/refreshtoken", isAuthenticated,updateAccessToken);
 router.put("/update-userinfo", isAuthenticated,updateUserInfo);
 router.put("/update-userpassword", isAuthenticated,updatePassword);
 router.put("/update-avatar", isAuthenticated,updateProfilePic);
+
+router.get("/get-users", isAuthenticated,authorizeRoles("admin"), adminGetAllUsers);
+router.put("/update-userrole", isAuthenticated,authorizeRoles("admin"), updateUserRole);
+router.delete("/delete-user/:id", isAuthenticated,authorizeRoles("admin"), deleteUser);
 
 // Exporting the router module
 module.exports = router;

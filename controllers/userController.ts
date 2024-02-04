@@ -9,11 +9,13 @@ import { ErrorHandler } from "../utils/ErrorHandler";
 import {
   accessTokenOptions,
   refreshTokenOptions,
-  sendToken,accessTokenExpire,refreshTokenExpire
+  sendToken,
+  accessTokenExpire,
+  refreshTokenExpire,
 } from "../utils/jwt";
 import { redis } from "../utils/redis";
-import { getUserById } from "../services/user.services";
-import {v2 as cloudinary} from 'cloudinary';
+import { getAllUsersService, getUserById, updateUserRoleService } from "../services/user.services";
+import { v2 as cloudinary } from "cloudinary";
 const User = require("../models/user");
 
 //register user
@@ -215,7 +217,7 @@ export const updateAccessToken = catchAsyncError(
       const session = await redis.get(decoded.id as string);
 
       if (!session) {
-        return next(new ErrorHandler(message, 400));
+        return next(new ErrorHandler("Please login to access the resourse", 400));
       }
       const user = JSON.parse(session);
       const accessToken = jwt.sign(
@@ -235,6 +237,7 @@ export const updateAccessToken = catchAsyncError(
       req.user = user;
       res.cookie("access_token", accessToken, accessTokenOptions);
       res.cookie("refresh_token", refreshToken, refreshTokenOptions);
+      await redis.set(user._id,JSON.stringify(user), "EX",604800) //7days if user not loged in for 7day delete cache
       return res.status(200).json({
         success: true,
         accessToken,
@@ -367,52 +370,85 @@ export const updatePassword = catchAsyncError(
 interface IUpdateProfilePic {
   avatar: string;
 }
-export const  updateProfilePic = catchAsyncError(async (req: Request, res: Response, next: NextFunction) => {
-  
-  try {
-    const { avatar } = req.body;
-    const userId = req.user._id;
-    let user = await User.findById(userId);
+export const updateProfilePic = catchAsyncError(
+  async (req: Request, res: Response, next: NextFunction) => {
+    try {
+      const { avatar } = req.body;
+      const userId = req.user._id;
+      let user = await User.findById(userId);
 
-    if (!avatar || !user) {
-      return next(new ErrorHandler("not found", 400));
+      if (!avatar || !user) {
+        return next(new ErrorHandler("not found", 400));
+      }
+      console.log("checkimg avart", user.avatar);
+      if (user.avatar?.public_id) {
+        if (user.avatar.public_id)
+          cloudinary.uploader.destroy(user.avatar.public_id);
+      }
+
+      const myCloud = await cloudinary.uploader.upload(avatar, {
+        folder: "avatar",
+        width: 150,
+      });
+
+      user.avatar = {
+        public_id: myCloud.public_id,
+        url: myCloud.secure_url,
+      };
+      console.log("hrr4", user.avatar);
+
+      await user.save();
+      await redis.set(userId, JSON.stringify(user));
+      return res.status(200).json({ success: true, data: { ...user.avatar } });
+    } catch (err: any) {
+      return next(new ErrorHandler(err.message, 400));
     }
-    console.log("checkimg avart",user.avatar)
-    if (user.avatar?.public_id) {
-      if(user.avatar.public_id)
-      cloudinary.uploader.destroy(user.avatar.public_id);
-    }
-    
-    const myCloud = await cloudinary.uploader.upload(avatar, {
-      folder: "avatar",
-      width: 150,
-    });
-
-    user.avatar = {
-      public_id: myCloud.public_id,
-      url: myCloud.secure_url,
-    };
-    console.log("hrr4", user.avatar)
-
-    await user.save();
-    await redis.set(userId, JSON.stringify(user));
-    return res.status(200).json({ success: true, data: { ...user.avatar } });
-  } catch (err:any) {
-    return next(new ErrorHandler(err.message, 400));
-
   }
-});
+);
 
-const deleteUser = async (req: Request, res: Response) => {
+
+//2.03
+
+//Admin functions
+// get all user only admins
+export const adminGetAllUsers = catchAsyncError(
+  async (req: Request, res: Response, next: NextFunction) => {
+    try {
+      getAllUsersService(res);
+    } catch (err: any) {
+      return next(new ErrorHandler(err.message, 400));
+    }
+  }
+);
+
+// update user only admins
+export const updateUserRole = catchAsyncError(
+  async (req: Request, res: Response, next: NextFunction) => {
+    try {
+      const {id,role}=req.body;
+      updateUserRoleService(res,id,role);
+    } catch (err: any) {
+      return next(new ErrorHandler(err.message, 500));
+    }
+  }
+);
+
+// delete user only admins
+export const deleteUser =catchAsyncError( async (req: Request, res: Response, next: NextFunction) => {
   try {
     const { userId } = req.params;
 
     await User.findByIdAndDelete(userId);
+    await redis.del(userId);
 
-    res.json({ message: "User deleted successfully" });
-  } catch (err) {
-    console.error(err);
-    res.status(500).json({ message: "Something went wrong" });
+    res.status(200).json({
+      success:true,      
+      message: "User deleted successfully" 
+    });
+  } catch (err:any) {
+    // console.error(err);
+    // res.status(500).json({ message: "Something went wrong" });
+    return next(new ErrorHandler(err.message, 500));
+
   }
-};
-//2.03
+});
